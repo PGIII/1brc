@@ -1,12 +1,11 @@
-use memchr::memchr;
+use memchr::{memchr, memchr_iter, memrchr};
+use memmap2::MmapOptions;
 use std::{
     cmp::{max, min},
     collections::HashMap,
     fmt::Display,
-    fs,
-    io::{BufRead, BufReader},
-    str,
-    sync::{Arc, Mutex},
+    fs, str,
+    sync::Arc,
     thread,
 };
 
@@ -51,46 +50,35 @@ fn main() {
         .read(true)
         .open(MEASUREMENTS_FILE)
         .unwrap();
-
-    let reader = BufReader::with_capacity(4096 * 1024, file);
-    let reader = Arc::new(Mutex::new(reader));
+    let file_mm = unsafe { MmapOptions::new().map(&file).unwrap() };
+    let file = Arc::new(file_mm);
     const THREADS: i32 = 12;
     const LINES: usize = 10_000;
+    const CHUNK_SIZE: usize = 8096 * 1024;
+    let chunk_count = file.len() / CHUNK_SIZE;
     let mut handles = vec![];
+    let mut last_chunk_end = 0;
+    while last_chunk_end <= file.len() {
+        let file_clone = file.clone();
+        let mut current_end = last_chunk_end + CHUNK_SIZE;
+        current_end = min(
+            memrchr(b'\n', &file[last_chunk_end..current_end]).expect("Couldnt find newline"),
+            file.len(),
+        );
 
-    for _ in 0..THREADS {
-        let reader = reader.clone();
         let handle = thread::spawn(move || {
+            let chunk = &file_clone[last_chunk_end..current_end];
+            let iter = memchr_iter(b'\n', chunk);
+            let mut last = 0;
             let mut stations = HashMap::new();
-            const NEW_VEC: Vec<u8> = Vec::new();
-            let mut read_buf: [Vec<u8>; LINES] = [NEW_VEC; LINES];
-            'reader: loop {
-                {
-                    let mut reader_locked = reader.lock().unwrap();
-                    for line in &mut read_buf {
-                        if let Ok(n) = reader_locked.read_until(b'\n', line) {
-                            if n == 0 {
-                                break 'reader;
-                            }
-                        } else {
-                            break 'reader;
-                        }
-                    }
-                }
-                for line in &mut read_buf {
-                    parse(&line[0..line.len() - 1], &mut stations);
-                    line.clear();
-                }
-            }
-
-            for line in read_buf {
-                if !line.is_empty() {
-                    parse(&line[0..line.len() - 1], &mut stations);
-                }
+            for i in iter {
+                parse(&chunk[last..i], &mut stations);
+                last = i + 1; //+1 to get past old /n
             }
             stations
         });
         handles.push(handle);
+        last_chunk_end += current_end;
     }
 
     let mut stations = HashMap::new();
@@ -99,8 +87,10 @@ fn main() {
         stations.extend(thread_stations);
     }
 
+    let mut sorted: Vec<_> = stations.iter().collect();
+    sorted.sort_by_key(|&(name, _)| str::from_utf8(name).unwrap());
     print!("{{");
-    for station in stations.values() {
+    for (_name, station) in sorted {
         print!("{station}");
     }
     println!("}}");

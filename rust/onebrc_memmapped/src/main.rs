@@ -55,15 +55,12 @@ fn main() {
     let iter = memchr_iter(b'\n', &file_mm);
     let mut last = 0;
     for i in iter {
-        if i == file_mm.len() {
-            break;
-        }
         parse(&file_mm[last..i], &mut stations);
         last = i + 1;
     }
 
     let mut sorted: Vec<_> = stations.iter().collect();
-    sorted.sort_by_key(|&(name, _)| name);
+    sorted.sort_by_key(|&(name, _)| str::from_utf8(name).unwrap());
     print!("{{");
     for (_name, station) in sorted {
         print!("{station}");
