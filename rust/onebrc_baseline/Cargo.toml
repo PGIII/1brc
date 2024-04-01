@@ -7,3 +7,10 @@ edition = "2021"
 
 [dependencies]
 memchr = "2.7.1"
+
+[dev-dependencies]
+criterion = "0.3"
+
+[[bench]]
+name = "my_benchmark"
+harness = false
