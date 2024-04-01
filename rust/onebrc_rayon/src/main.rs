@@ -1,38 +1,42 @@
-use memchr::memchr;
+use memchr::{memchr, memchr_iter, memmem};
+use memmap2::MmapOptions;
 use std::{
     cmp::{max, min},
     collections::HashMap,
     fmt::Display,
     fs,
-    io::{self, BufRead, BufReader},
+    io::{BufRead, BufReader, Read},
     str,
 };
 
-const MEASUREMENTS_FILE: &'static str = "measurements.txt";
+const MEASUREMENTS_FILE: &'static str = "../../measurements.txt";
 const ZERO_ASCII: u8 = 48;
 #[derive(Debug, Default, Clone)]
-pub struct Station {
-    pub name: Box<[u8]>,
+pub struct Station<'a> {
+    pub name: &'a [u8],
     pub min: i32,
     pub max: i32,
     pub sum: i64,
     pub count: u32,
 }
 
-impl Display for Station {
+impl Display for Station<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let min = self.min as f64 / 100.0;
-        let max = self.max as f64 / 100.0;
-        let mean = round_to_1decimal_f64(self.sum / self.count as i64);
+        let min = self.min as f64 / 10.0;
+        let max = self.max as f64 / 10.0;
+        let mean = (self.sum / self.count as i64) as f64 / 10.0;
         let name = str::from_utf8(&self.name).unwrap();
-        write!(f, "{name}={min:.1}/{mean:.1}/{max:.1}")
+        write!(f, "{name}={min:.1}/{mean:.1}/{max:.1}, ")
     }
 }
+impl<'a> Station<'a> {
+    pub fn minf(&self) -> f64 {
+        self.min as f64 / 10.0
+    }
 
-impl Station {
-    pub fn new(name: &[u8], temp: i32) -> Self {
+    pub fn new(name: &'a [u8], temp: i32) -> Self {
         Self {
-            name: name.into(),
+            name,
             min: temp,
             max: temp,
             sum: temp as i64,
@@ -40,55 +44,34 @@ impl Station {
         }
     }
 }
-
-type StationMap = HashMap<Box<[u8]>, Station>;
-
-/// Convert out fixed 2 decimal type to a f64 with 1 decimal place thats properly rounded
-fn round_to_1decimal_f64(num: i64) -> f64 {
-    let hund = num % 10;
-    let mut num = num / 10;
-    if hund >= 5 {
-        num += 1;
-    }
-    num as f64 / 10.0
-}
-
 // takes 45sec
 fn main() {
     let file = fs::OpenOptions::new()
         .read(true)
         .open(MEASUREMENTS_FILE)
         .unwrap();
-
-    let mut reader = BufReader::with_capacity(4096 * 1024, file);
+    let file_mm = unsafe { MmapOptions::new().map(&file).unwrap() };
     let mut stations = HashMap::new();
-    let mut read_buf = vec![];
-    while let Ok(n) = reader.read_until(b'\n', &mut read_buf) {
-        if n == 0 {
+    let iter = memchr_iter(b'\n', &file_mm);
+    let mut last = 0;
+    for i in iter {
+        if i == file_mm.len() {
             break;
         }
-
-        parse(&read_buf[0..n - 1], &mut stations);
-        read_buf.clear();
+        parse(&file_mm[last..i], &mut stations);
+        last = i + 1;
     }
-    let mut output = io::stdout().lock();
-    print_string(&stations, &mut output);
-}
 
-fn print_string(stations: &StationMap, output: &mut impl io::Write) {
     let mut sorted: Vec<_> = stations.iter().collect();
     sorted.sort_by_key(|&(name, _)| name);
-    let mut sorted = sorted.into_iter();
-    let (_, first) = sorted.next().unwrap();
-    write!(output, "{{").unwrap();
-    write!(output, "{first}").unwrap();
-    for (_, station) in sorted {
-        write!(output, ", {station}").unwrap();
+    print!("{{");
+    for (_name, station) in sorted {
+        print!("{station}");
     }
-    writeln!(output, "}}").unwrap();
+    println!("}}");
 }
 
-fn parse(line: &[u8], stations: &mut StationMap) {
+fn parse<'a>(line: &'a [u8], stations: &mut HashMap<&'a [u8], Station<'a>>) {
     if line.len() == 0 {
         return;
     }
@@ -103,7 +86,7 @@ fn parse(line: &[u8], stations: &mut StationMap) {
             station.count += 1;
         } else {
             let station = Station::new(station_name, temp_int);
-            stations.insert(station.name.clone(), station);
+            stations.insert(station.name.into(), station);
         }
     } else {
         panic!("Received invalid line");
@@ -126,7 +109,7 @@ fn parse_float_str_to_int(temperature: &[u8]) -> i32 {
         }
     }
 
-    result * neg * 10
+    result * neg
 }
 
 #[cfg(test)]
@@ -135,23 +118,23 @@ mod tests {
 
     #[test]
     fn float_parse_pos() {
-        assert_eq!(parse_float_str_to_int(b"10.20"), 10200);
+        assert_eq!(parse_float_str_to_int(b"10.20"), 1020);
     }
 
     #[test]
     fn float_parse_neg() {
-        assert_eq!(parse_float_str_to_int(b"-10.20"), -10200);
+        assert_eq!(parse_float_str_to_int(b"-10.20"), -1020);
     }
 
     #[test]
     fn float_parse_large() {
-        assert_eq!(parse_float_str_to_int(b"11110.20"), 11110200);
+        assert_eq!(parse_float_str_to_int(b"11110.20"), 1111020);
     }
 
     #[test]
     fn station_convertions() {
-        let station = Station::new(b"Test", 6000);
-        assert_eq!(station.min as f64 / 100.0, 60.0);
+        let station = Station::new(b"Test", 600);
+        assert_eq!(station.minf(), 60.0);
     }
 
     #[test]
@@ -163,18 +146,18 @@ mod tests {
         parse(measurment_str, &mut stations);
         {
             let station = stations.get(station_name).unwrap();
-            assert_eq!("test=60.0/60.0/60.0", format!("{station}"));
+            assert_eq!("test=60.0/60.0/60.0, ", format!("{station}"));
         }
 
         parse(b"test;30.0", &mut stations);
         {
             let station = stations.get(station_name).unwrap();
-            assert_eq!("test=30.0/45.0/60.0", format!("{station}"));
+            assert_eq!("test=30.0/45.0/60.0, ", format!("{station}"));
         }
         parse(b"test;-45.0", &mut stations);
         {
             let station = stations.get(station_name).unwrap();
-            assert_eq!("test=-45.0/15.0/60.0", format!("{station}"));
+            assert_eq!("test=-45.0/15.0/60.0, ", format!("{station}"));
         }
     }
 }
