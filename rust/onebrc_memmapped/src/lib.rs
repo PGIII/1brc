@@ -1,11 +1,10 @@
-use memchr::{memchr, memchr_iter, memrchr};
+use memchr::{memchr, memchr_iter};
 use memmap2::MmapOptions;
 use std::{
     cmp::{max, min},
     collections::HashMap,
     fmt::Display,
     fs, io, str,
-    thread::{self, available_parallelism},
 };
 
 const MEASUREMENTS_FILE: &'static str = "measurements.txt";
@@ -50,40 +49,14 @@ pub fn calculate_averages() {
         .open(MEASUREMENTS_FILE)
         .unwrap();
     let file_mm = unsafe { MmapOptions::new().map(&file).unwrap() };
-    let file_size = file_mm.len();
     let mut stations = HashMap::new();
-    let threads = available_parallelism().unwrap();
-    let chunk_size = file_size / threads;
-    let mut last_end = 0;
+    let iter = memchr_iter(b'\n', &file_mm);
+    let mut last = 0;
+    for i in iter {
+        parse(&file_mm[last..i], &mut stations);
+        last = i + 1;
+    }
 
-    thread::scope(|s| {
-        let mut handles = vec![];
-        while last_end < file_size {
-            //split up file, but make sure last byte of chunk is \n
-            let end = min(
-                memrchr(b'\n', &file_mm[last_end..last_end + chunk_size]).unwrap() + 1,
-                file_size,
-            );
-            let chunk = &file_mm[last_end..end];
-            last_end = end;
-            let handle = s.spawn(move || {
-                let mut stations = HashMap::new();
-                let iter = memchr_iter(b'\n', &chunk);
-                let mut last = 0;
-                for i in iter {
-                    parse(&chunk[last..i], &mut stations);
-                    last = i + 1;
-                }
-                stations
-            });
-            handles.push(handle);
-        }
-
-        for handle in handles {
-            let map = handle.join().unwrap();
-            stations.extend(map);
-        }
-    });
     let mut output = io::stdout().lock();
     print_string(&stations, &mut output);
 }
