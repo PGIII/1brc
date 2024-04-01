@@ -9,7 +9,7 @@ use std::{
     thread,
 };
 
-const MEASUREMENTS_FILE: &'static str = "../../measurements.txt";
+const MEASUREMENTS_FILE: &'static str = "measurements.txt";
 const ZERO_ASCII: u8 = 48;
 #[derive(Debug, Default, Clone)]
 pub struct Station {

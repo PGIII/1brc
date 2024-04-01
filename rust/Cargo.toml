@@ -1,0 +1,3 @@
+[workspace]
+members = ["onebrc_baseline", "onebrc_threaded", "onebrc_tokio", "onebrc_rayon", "onebrc_memmapped"]
+resolver = "2"
