@@ -10,6 +10,7 @@ use std::{
 
 const MEASUREMENTS_FILE: &'static str = "measurements.txt";
 const ZERO_ASCII: u8 = 48;
+
 #[derive(Debug, Default, Clone)]
 pub struct Station<'a> {
     pub name: &'a [u8],
@@ -51,7 +52,7 @@ pub fn calculate_averages() {
         .unwrap();
     let file_mm = unsafe { MmapOptions::new().map(&file).unwrap() };
     let file_size = file_mm.len();
-    let mut stations = HashMap::new();
+    let mut stations = StationMap::new();
     let threads = available_parallelism().unwrap();
     let chunk_size = file_size / threads;
     let mut last_end = 0;
@@ -60,10 +61,18 @@ pub fn calculate_averages() {
         let mut handles = vec![];
         while last_end < file_size {
             //split up file, but make sure last byte of chunk is \n
-            let end = min(
-                memrchr(b'\n', &file_mm[last_end..last_end + chunk_size]).unwrap() + 1,
-                file_size,
-            );
+            let potential_end = min(last_end + chunk_size, file_size);
+            let end = if potential_end != file_size {
+                min(
+                    memchr(b'\n', &file_mm[last_end + chunk_size..]).unwrap()
+                        + 1
+                        + chunk_size
+                        + last_end,
+                    file_size,
+                )
+            } else {
+                file_size
+            };
             let chunk = &file_mm[last_end..end];
             last_end = end;
             let handle = s.spawn(move || {
@@ -79,9 +88,23 @@ pub fn calculate_averages() {
             handles.push(handle);
         }
 
+        let mut partial_maps = vec![];
         for handle in handles {
             let map = handle.join().unwrap();
-            stations.extend(map);
+            partial_maps.push(map);
+        }
+        for map in partial_maps {
+            for (name, new_station) in map {
+                //check if exists in map, if so merge them, other wise insert it
+                if let Some(station) = stations.get_mut(name) {
+                    station.min = min(new_station.min, station.min);
+                    station.max = max(new_station.max, station.max);
+                    station.count += new_station.count;
+                    station.sum += new_station.sum;
+                } else {
+                    stations.insert(name, new_station);
+                }
+            }
         }
     });
     let mut output = io::stdout().lock();

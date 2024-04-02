@@ -41,7 +41,7 @@ for sample in $(ls $INPUT); do
   rm -f measurements.txt
   ln -s $sample measurements.txt
 
-  diff --color=always --side-by-side <("./target/release/onebrc_$FORK" | ./tocsv.sh) <(./tocsv.sh < ${sample%.txt}.out)
+  diff --color=always --side-by-side --suppress-common-lines <("./target/release/onebrc_$FORK" | ./tocsv.sh) <(./tocsv.sh < ${sample%.txt}.out)
 done
 
 rm measurements.txt
