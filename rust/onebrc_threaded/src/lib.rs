@@ -1,8 +1,8 @@
-use memchr::{memchr, memchr_iter, memrchr};
+use memchr::{memchr, memchr_iter};
 use memmap2::MmapOptions;
+use rustc_hash::FxHashMap;
 use std::{
     cmp::{max, min},
-    collections::HashMap,
     fmt::Display,
     fs, io, str,
     thread::{self, available_parallelism},
@@ -42,7 +42,7 @@ impl<'a> Station<'a> {
     }
 }
 
-type StationMap<'a> = HashMap<&'a [u8], Station<'a>>;
+type StationMap<'a> = FxHashMap<&'a [u8], Station<'a>>;
 
 #[inline]
 pub fn calculate_averages() {
@@ -52,7 +52,7 @@ pub fn calculate_averages() {
         .unwrap();
     let file_mm = unsafe { MmapOptions::new().map(&file).unwrap() };
     let file_size = file_mm.len();
-    let mut stations = StationMap::new();
+    let mut stations = StationMap::default();
     let threads = available_parallelism().unwrap();
     let chunk_size = file_size / threads;
     let mut last_end = 0;
@@ -76,7 +76,7 @@ pub fn calculate_averages() {
             let chunk = &file_mm[last_end..end];
             last_end = end;
             let handle = s.spawn(move || {
-                let mut stations = HashMap::new();
+                let mut stations = StationMap::default();
                 let iter = memchr_iter(b'\n', &chunk);
                 let mut last = 0;
                 for i in iter {
@@ -134,7 +134,7 @@ fn print_string(stations: &StationMap, output: &mut impl io::Write) {
     writeln!(output, "}}").unwrap();
 }
 
-fn parse<'a>(line: &'a [u8], stations: &mut HashMap<&'a [u8], Station<'a>>) {
+fn parse<'a>(line: &'a [u8], stations: &mut StationMap<'a>) {
     if line.len() == 0 {
         return;
     }
@@ -202,7 +202,7 @@ mod tests {
 
     #[test]
     fn test_parse() {
-        let mut stations = HashMap::new();
+        let mut stations = StationMap::default();
         let measurment_str = b"test;60.0";
         let station_name: &[u8] = b"test";
 
