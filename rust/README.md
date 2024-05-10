@@ -3,6 +3,10 @@
 ## Performance Summary
 
 ### Tested on AMD Threadripper 1950X, 64GB of ram, 1TB WD Blue NVME. Running Fedora 40. 5/10/24
+
+All benchmarks are run using Criterion. 
+You can run them your self by going into a project and running `cargo run`
+
 | Project | Run Time (Seconds)|
 | ------- | ----------------- |
 | baseline | 77.096s |
@@ -15,7 +19,10 @@
 ### Baseline
 
 Most Straight forward approach using a BufReader to read the file in a single thread, reading until we find a new line and then processing that.
-All solutions use Integers to represent fixed point decimals. This is 1. Faster, and 2. Allows us to get the correct rounding to match the output of the samples
+All solutions use Integers to represent fixed point decimals. 
+This is 
+1. Faster 
+2. Allows us to get the correct rounding to match the output of the samples
 
 ### Memmap
 
