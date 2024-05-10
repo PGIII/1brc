@@ -53,7 +53,6 @@ fn round_to_1decimal_f64(num: i64) -> f64 {
     num as f64 / 10.0
 }
 
-// takes 45sec
 pub fn calculate_averages() {
     let file = fs::OpenOptions::new()
         .read(true)
