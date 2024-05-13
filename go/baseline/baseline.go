@@ -24,18 +24,15 @@ func roundToFloat(num FixedPoint) float64 {
 }
 
 type Station struct {
-	name  string
-	sum   FixedPoint
-	min   FixedPoint
-	max   FixedPoint
-	count uint
+	sum, min, max FixedPoint
+	count         uint
 }
 
-func stationToString(station Station) string {
+func stationToString(name string, station Station) string {
 	nMin := float64(station.min) / 100.0
 	nMax := float64(station.max) / 100.0
 	nAvg := roundToFloat(station.sum / FixedPoint(station.count))
-	return fmt.Sprintf("%s=%.1f/%.1f/%.1f", string(station.name), nMin, nAvg, nMax)
+	return fmt.Sprintf("%s=%.1f/%.1f/%.1f", string(name), nMin, nAvg, nMax)
 }
 
 func check(e error) {
@@ -67,15 +64,20 @@ func main() {
 	reader := bufio.NewScanner(file)
 	stations := make(map[string]Station)
 	for reader.Scan() {
-		station := parseLine(reader.Bytes())
-		if stored_station, ok := stations[station.name]; ok {
-			stored_station.min = min(stored_station.min, station.min)
-			stored_station.max = max(stored_station.max, station.max)
-			stored_station.sum += station.sum
-			stored_station.count += station.count
-			stations[station.name] = stored_station
+		name, temp := parseLine(reader.Bytes())
+		if stored_station, ok := stations[name]; ok {
+			stored_station.min = min(stored_station.min, temp)
+			stored_station.max = max(stored_station.max, temp)
+			stored_station.sum += temp
+			stored_station.count += 1
+			stations[name] = stored_station
 		} else {
-			stations[station.name] = station
+			stations[name] = Station{
+				min:   temp,
+				max:   temp,
+				sum:   temp,
+				count: 1,
+			}
 		}
 	}
 	names := make([]string, 0, len(stations))
@@ -92,16 +94,16 @@ func main() {
 		} else {
 			first = false
 		}
-		fmt.Print(stationToString(stations[name]))
+		fmt.Print(stationToString(name, stations[name]))
 	}
 	fmt.Println("}")
 }
 
-func parseLine(line []byte) Station {
+func parseLine(line []byte) (string, FixedPoint) {
 	slices := bytes.Split(line, []byte(";"))
 	name := string(slices[0])
 	temp := parseBytesToFixedPoint(slices[1])
-	return Station{name: name, sum: temp, count: 1, min: temp, max: temp}
+	return name, temp
 }
 
 func parseBytesToFixedPoint(in []byte) FixedPoint {
