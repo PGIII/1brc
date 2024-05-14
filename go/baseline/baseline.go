@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 )
@@ -58,21 +59,25 @@ func max(a, b FixedPoint) FixedPoint {
 }
 
 func main() {
+	parse(os.Stdout)
+}
+
+func parse(output io.Writer) {
 	file, err := os.Open("./measurements.txt")
 	check(err)
 	defer file.Close()
 	reader := bufio.NewScanner(file)
-	stations := make(map[string]Station)
+	stations := make(map[string]*Station)
 	for reader.Scan() {
 		name, temp := parseLine(reader.Bytes())
-		if stored_station, ok := stations[name]; ok {
-			stored_station.min = min(stored_station.min, temp)
-			stored_station.max = max(stored_station.max, temp)
-			stored_station.sum += temp
-			stored_station.count += 1
-			stations[name] = stored_station
+		s := stations[name]
+		if s != nil {
+			s.min = min(s.min, temp)
+			s.max = max(s.max, temp)
+			s.sum += temp
+			s.count += 1
 		} else {
-			stations[name] = Station{
+			stations[name] = &Station{
 				min:   temp,
 				max:   temp,
 				sum:   temp,
@@ -86,23 +91,23 @@ func main() {
 	}
 
 	sort.Strings(names)
-	fmt.Print("{")
+	fmt.Fprint(output, "{")
 	first := true
 	for _, name := range names {
 		if !first {
-			fmt.Print(", ")
+			fmt.Fprint(output, ", ")
 		} else {
 			first = false
 		}
-		fmt.Print(stationToString(name, stations[name]))
+		fmt.Fprint(output, stationToString(name, *stations[name]))
 	}
-	fmt.Println("}")
+	fmt.Fprintln(output, "}")
 }
 
 func parseLine(line []byte) (string, FixedPoint) {
-	slices := bytes.Split(line, []byte(";"))
-	name := string(slices[0])
-	temp := parseBytesToFixedPoint(slices[1])
+	semiPos := bytes.IndexByte(line, ';')
+	name := string(line[:semiPos])
+	temp := parseBytesToFixedPoint(line[semiPos+1:])
 	return name, temp
 }
 
