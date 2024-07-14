@@ -37,11 +37,14 @@ fi
 
 for sample in $(ls $INPUT); do
   echo "Validating $FORK -- $sample"
-
+  
+  cd $FORK
+  go build .
+  cd ..
   rm -f measurements.txt
   ln -s $sample measurements.txt
-
-  diff --color=always --side-by-side --suppress-common-lines <(go run "$FORK/$FORK.go" | ../tocsv.sh) <(../tocsv.sh < ${sample%.txt}.out)
+  
+  diff --color=always --side-by-side --suppress-common-lines <(./"$FORK/$FORK" | ../tocsv.sh) <(../tocsv.sh < ${sample%.txt}.out)
 done
 
 rm measurements.txt

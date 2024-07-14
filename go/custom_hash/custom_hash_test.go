@@ -43,7 +43,7 @@ func BenchmarkOriginalParseLine(b *testing.B) {
 	}
 }
 
-func BenchmarkParseLine(b *testing.B) {
+func BenchmarkLineParse(b *testing.B) {
 	str := []byte("Hamburg;12.0")
 	for i := 0; i < b.N; i++ {
 		parseLine(str)

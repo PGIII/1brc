@@ -2,67 +2,89 @@ package main
 
 import (
 	"bytes"
-	"fmt"
 )
 
 type bucket[T any] struct {
 	key []byte
-	val *T
+	val T
 }
 
 type hashMap[T any] []bucket[T]
 
-func (hm *hashMap[T]) find(key []byte) (*T, uint64) {
+func (hm *hashMap[T]) contains(key []byte) bool {
+	length := len(*hm)
 	hash := hash(key)
-	pos := hash % uint64(len(*hm))
+	pos := int(hash % uint64(length))
+	if bytes.Compare((*hm)[pos].key, key) == 0 {
+		return true
+	} else {
+		for i := pos + 1; i < length; i++ {
+			if bytes.Compare((*hm)[i].key, key) == 0 {
+				return true
+			}
+		}
+		for i := 0; i < pos; i++ {
+			if bytes.Compare((*hm)[i].key, key) == 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (hm *hashMap[T]) find(key []byte) (T, uint64) {
+	length := len(*hm)
+	hash := hash(key)
+	pos := int(hash % uint64(length))
 	if bytes.Compare((*hm)[pos].key, key) == 0 {
 		return (*hm)[pos].val, hash
 	} else {
-		for i := pos + 1; i != pos; i++ {
-			if bytes.Compare((*hm)[pos].key, key) == 0 {
-				return (*hm)[pos].val, hash
+		for i := pos + 1; i < len(*hm); i++ {
+			if (*hm)[i].key == nil {
+				return (*hm)[i].val, hash
+			}
+		}
+		for i := 0; i < pos; i++ {
+			if (*hm)[i].key == nil {
+				return (*hm)[i].val, hash
 			}
 		}
 	}
-	return nil, hash
+	return *new(T), hash
 }
 
-func (hm *hashMap[T]) insertByHash(hash uint64, key []byte, val *T) {
-	pos := hash % uint64(len(*hm))
-	fmt.Printf("Len: %d", len(*hm))
-	if (*hm)[pos].key == nil {
-		(*hm)[pos].key = key
-		(*hm)[pos].val = val
-	} else {
-		// exploiting integer overflow here
-		for i := pos + 1; i != pos; i++ {
-			if (*hm)[pos].key == nil {
-				(*hm)[pos].key = key
-				(*hm)[pos].val = val
-				break
-			}
-		}
-		panic("Couldn't find slot in hashmap")
-	}
+func (hm *hashMap[T]) insertByHash(hash uint64, key []byte, val T) {
+	length := len(*hm)
+	pos := int(hash % uint64(length))
+	(*hm)[pos].key = key
+	(*hm)[pos].val = val
 }
 
-func (hm *hashMap[T]) insert(key []byte, val *T) {
+func (hm *hashMap[T]) insert(key []byte, val T) {
 	hash := hash(key)
 	hm.insertByHash(hash, key, val)
 }
 
 // returns 1 if collison occured, 0 otherwise
-func (hm *hashMap[T]) insertChecked(key []byte, val *T) uint {
+func (hm *hashMap[T]) insertChecked(key []byte, val T) int {
+	length := len(*hm)
 	hash := hash(key)
-	if (*hm)[hash].key == nil {
-		(*hm)[hash].key = key
-		(*hm)[hash].val = val
+	pos := int(hash % uint64(length))
+	if (*hm)[pos].key == nil {
+		(*hm)[pos].key = key
+		(*hm)[pos].val = val
 	} else {
-		// exploiting integer overflow here
-		for i := hash + 1; i != hash; i++ {
-			if (*hm)[hash].key == nil {
-				(*hm)[hash].key = key
-				(*hm)[hash].val = val
+		for i := pos + 1; i < len(*hm); i++ {
+			if (*hm)[i].key == nil {
+				(*hm)[i].key = key
+				(*hm)[i].val = val
+				return 1
+			}
+		}
+		for i := 0; i < pos; i++ {
+			if (*hm)[i].key == nil {
+				(*hm)[i].key = key
+				(*hm)[i].val = val
 				return 1
 			}
 		}

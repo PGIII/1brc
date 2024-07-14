@@ -23,13 +23,14 @@ func roundToFloat(num FixedPoint) float64 {
 type Station struct {
 	sum, min, max FixedPoint
 	count         uint
+	name          []byte
 }
 
-func stationToString(name string, station Station) string {
+func stationToString(station *Station) string {
 	nMin := float64(station.min) / 100.0
 	nMax := float64(station.max) / 100.0
 	nAvg := roundToFloat(station.sum / FixedPoint(station.count))
-	return fmt.Sprintf("%s=%.1f/%.1f/%.1f", string(name), nMin, nAvg, nMax)
+	return fmt.Sprintf("%s=%.1f/%.1f/%.1f", string(station.name), nMin, nAvg, nMax)
 }
 
 func check(e error) {
@@ -62,7 +63,7 @@ func parse(output io.Writer) {
 	file, err := os.Open("./measurements.txt")
 	check(err)
 	defer file.Close()
-	stations := make(map[string]*Station)
+	stations := make(hashMap[*Station], 1<<17)
 	buffer := make([]byte, 4096*1024)
 	startReadAt := 0
 	for {
@@ -77,21 +78,22 @@ func parse(output io.Writer) {
 				break
 			}
 			name, temp := parseLine(buffer[start : start+newLinePos])
-			nameStr := string(name)
+			//nameStr := string(name)
 			start += newLinePos + 1
-			s := stations[nameStr]
+			s, hash := stations.find(name)
 			if s != nil {
 				s.min = min(s.min, temp)
 				s.max = max(s.max, temp)
 				s.sum += temp
 				s.count += 1
 			} else {
-				stations[nameStr] = &Station{
+				stations.insertByHash(hash, name, &Station{
 					min:   temp,
 					max:   temp,
 					sum:   temp,
 					count: 1,
-				}
+					name:  name,
+				})
 			}
 		}
 
@@ -108,21 +110,25 @@ func parse(output io.Writer) {
 			startReadAt = 0
 		}
 	}
-	names := make([]string, 0, len(stations))
-	for name := range stations {
-		names = append(names, name)
+	sorted := make([]*Station, 0, len(stations))
+	for _, s := range stations {
+		if s.key != nil {
+			sorted = append(sorted, s.val)
+		}
 	}
 
-	sort.Strings(names)
+	sort.Slice(sorted, func(i, j int) bool {
+		return bytes.Compare(sorted[i].name, sorted[j].name) < 0
+	})
 	fmt.Fprint(output, "{")
 	first := true
-	for _, name := range names {
+	for _, s := range sorted {
 		if !first {
 			fmt.Fprint(output, ", ")
 		} else {
 			first = false
 		}
-		fmt.Fprint(output, stationToString(name, *stations[name]))
+		fmt.Fprint(output, stationToString(s))
 	}
 	fmt.Fprintln(output, "}")
 }
